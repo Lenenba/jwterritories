@@ -2,10 +2,13 @@ import { destroy, store } from '@/routes/options';
 import { type BreadcrumbItem } from '@/types';
 import { Form, Head, Link } from '@inertiajs/react';
 import { type MouseEvent, useEffect, useMemo, useState } from 'react';
+import { MoreVertical } from 'lucide-react';
 
 import HeadingSmall from '@/components/heading-small';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
+import { DataTable } from '@/components/ui/data-table';
+import { DataTablePagination } from '@/components/ui/data-table-pagination';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -17,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/app-layout';
 import SettingsLayout from '@/layouts/settings/layout';
 import { edit } from '@/routes/options';
+import { useDataTablePagination } from '@/hooks/use-data-table-pagination';
 
 type Option = {
     id: number;
@@ -79,6 +83,9 @@ export default function Options({ options }: { options: OptionsByList }) {
                 .includes(normalizedQuery),
         );
     }, [currentOptions, query]);
+
+    const pagination = useDataTablePagination(filteredOptions);
+    const paginatedOptions = pagination.paginatedItems;
 
     const totalCount = currentOptions.length;
     const activeCount = currentOptions.filter((option) => option.is_active)
@@ -212,7 +219,7 @@ export default function Options({ options }: { options: OptionsByList }) {
                         )}
 
                         <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
+                            <DataTable className="w-full text-sm">
                                 <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
                                     <tr>
                                         <th className="px-4 py-3">Label</th>
@@ -234,7 +241,7 @@ export default function Options({ options }: { options: OptionsByList }) {
                                             </td>
                                         </tr>
                                     )}
-                                    {filteredOptions.map((option) => (
+                                    {paginatedOptions.map((option) => (
                                         <tr
                                             key={option.id}
                                             className="border-t border-sidebar-border/70"
@@ -255,10 +262,11 @@ export default function Options({ options }: { options: OptionsByList }) {
                                                     <DropdownMenuTrigger asChild>
                                                         <Button
                                                             variant="ghost"
-                                                            size="sm"
-                                                            className="h-8 px-2"
+                                                            size="icon"
+                                                            className="h-8 w-8"
+                                                            aria-label="Actions"
                                                         >
-                                                            Actions
+                                                            <MoreVertical className="h-4 w-4" />
                                                         </Button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end">
@@ -291,8 +299,16 @@ export default function Options({ options }: { options: OptionsByList }) {
                                     </tr>
                                     ))}
                                 </tbody>
-                            </table>
+                            </DataTable>
                         </div>
+                        <DataTablePagination
+                            page={pagination.page}
+                            pageCount={pagination.pageCount}
+                            pageSize={pagination.pageSize}
+                            totalItems={pagination.totalItems}
+                            onPageChange={pagination.setPage}
+                            onPageSizeChange={pagination.setPageSize}
+                        />
                     </div>
 
                     <div

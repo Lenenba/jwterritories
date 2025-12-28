@@ -6,8 +6,11 @@ import { index as territoriesIndex, show as showTerritory } from '@/routes/terri
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import { type MouseEvent, useMemo, useState } from 'react';
+import { MoreVertical } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { DataTable } from '@/components/ui/data-table';
+import { DataTablePagination } from '@/components/ui/data-table-pagination';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -16,6 +19,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { humanizeDate, isWithinDays } from '@/lib/date';
+import { useDataTablePagination } from '@/hooks/use-data-table-pagination';
 
 type Kpis = {
     territories: number;
@@ -110,6 +114,9 @@ export default function Dashboard({
             return addressText.includes(normalizedQuery);
         });
     }, [recentVisits, tab, resultFilter, query]);
+
+    const pagination = useDataTablePagination(filteredVisits);
+    const paginatedVisits = pagination.paginatedItems;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -252,7 +259,7 @@ export default function Dashboard({
                     )}
 
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
+                        <DataTable className="w-full text-sm">
                             <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
                                 <tr>
                                     <th className="px-4 py-3">Territory</th>
@@ -277,7 +284,7 @@ export default function Dashboard({
                                         </td>
                                     </tr>
                                 )}
-                                {filteredVisits.map((visit) => (
+                                {paginatedVisits.map((visit) => (
                                     <tr
                                         key={visit.id}
                                         className="border-t border-sidebar-border/70"
@@ -312,10 +319,11 @@ export default function Dashboard({
                                                 <DropdownMenuTrigger asChild>
                                                     <Button
                                                         variant="ghost"
-                                                        size="sm"
-                                                        className="h-8 px-2"
+                                                        size="icon"
+                                                        className="h-8 w-8"
+                                                        aria-label="Actions"
                                                     >
-                                                        Actions
+                                                        <MoreVertical className="h-4 w-4" />
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
@@ -398,8 +406,16 @@ export default function Dashboard({
                                 </tr>
                             ))}
                             </tbody>
-                        </table>
+                        </DataTable>
                     </div>
+                    <DataTablePagination
+                        page={pagination.page}
+                        pageCount={pagination.pageCount}
+                        pageSize={pagination.pageSize}
+                        totalItems={pagination.totalItems}
+                        onPageChange={pagination.setPage}
+                        onPageSizeChange={pagination.setPageSize}
+                    />
                 </div>
             </div>
         </AppLayout>

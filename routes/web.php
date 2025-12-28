@@ -29,6 +29,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('territories.addresses.store');
     Route::post('territories/{territory}/addresses/import-scan', [AddressController::class, 'importScan'])
         ->name('territories.addresses.import-scan');
+    Route::get('territories/{territory}/addresses/street-lookup', [AddressController::class, 'streetLookup'])
+        ->name('territories.addresses.street-lookup');
     Route::post('territories/{territory}/addresses/bulk', [AddressController::class, 'bulkStore'])
         ->name('territories.addresses.bulk');
 

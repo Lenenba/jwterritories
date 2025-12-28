@@ -242,9 +242,19 @@ class TerritoryController extends Controller
     {
         $this->ensureOrganization($request, $territory->organization_id);
 
-        $territory->load(['addresses' => function ($query) {
-            $query->orderBy('street')->orderBy('label');
-        }]);
+        $territory->load([
+            'addresses' => function ($query) {
+                $query->orderBy('street')->orderBy('label');
+            },
+            'streets' => function ($query) {
+                $query->orderBy('name')->select([
+                    'id',
+                    'territory_id',
+                    'name',
+                    'geojson',
+                ]);
+            },
+        ]);
 
         $territoryData = [
             'id' => $territory->id,
@@ -276,6 +286,14 @@ class TerritoryController extends Controller
             ];
         });
 
+        $streets = $territory->streets->map(function ($street) {
+            return [
+                'id' => $street->id,
+                'name' => $street->name,
+                'geojson' => $street->geojson,
+            ];
+        });
+
         $statusOptions = OrganizationOption::query()
             ->where('organization_id', $request->user()->organization_id)
             ->where('list_key', 'address_status')
@@ -287,6 +305,7 @@ class TerritoryController extends Controller
         return Inertia::render('territories/show', [
             'territory' => $territoryData,
             'addresses' => $addresses,
+            'streets' => $streets,
             'statusOptions' => $statusOptions,
         ]);
     }

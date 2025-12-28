@@ -4,11 +4,14 @@ import { index as territoriesIndex, show as territoriesShow } from '@/routes/ter
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import { type MouseEvent, useMemo, useState } from 'react';
+import { MoreVertical } from 'lucide-react';
 
 import AddressScanImport from '@/components/address-scan-import';
 import AddressSearchDialog from '@/components/address-search-dialog';
 import TerritoryMap from '@/components/territory-map';
 import { Button } from '@/components/ui/button';
+import { DataTable } from '@/components/ui/data-table';
+import { DataTablePagination } from '@/components/ui/data-table-pagination';
 import {
     Dialog,
     DialogContent,
@@ -24,6 +27,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { humanizeDate } from '@/lib/date';
+import { useDataTablePagination } from '@/hooks/use-data-table-pagination';
 
 type Territory = {
     id: number;
@@ -49,6 +53,12 @@ type Address = {
     do_not_call: boolean;
 };
 
+type Street = {
+    id: number;
+    name: string;
+    geojson: unknown;
+};
+
 type Option = {
     label: string;
     value: string;
@@ -57,10 +67,12 @@ type Option = {
 export default function TerritoryShow({
     territory,
     addresses,
+    streets = [],
     statusOptions,
 }: {
     territory: Territory;
     addresses: Address[];
+    streets?: Street[];
     statusOptions: Option[];
 }) {
     const [tab, setTab] = useState<'all' | 'active' | 'do_not_call'>('all');
@@ -115,6 +127,9 @@ export default function TerritoryShow({
             return haystack.includes(normalizedQuery);
         });
     }, [addresses, tab, statusFilter, query]);
+
+    const pagination = useDataTablePagination(filteredAddresses);
+    const paginatedAddresses = pagination.paginatedItems;
 
     const totalAddresses = addresses.length;
     const mappedCount = addresses.filter(
@@ -223,7 +238,7 @@ export default function TerritoryShow({
                             </Button>
                         ) : null}
                     </div>
-                    <TerritoryMap addresses={addresses} />
+                    <TerritoryMap addresses={addresses} streets={streets} />
                     <p className="mt-3 text-xs text-muted-foreground">
                         Mapped {mappedCount} of {totalAddresses}{' '}
                         {totalAddresses === 1 ? 'address' : 'addresses'}
@@ -325,7 +340,7 @@ export default function TerritoryShow({
                     )}
 
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
+                        <DataTable className="w-full text-sm">
                             <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
                                 <tr>
                                     <th className="px-4 py-3">Address</th>
@@ -349,7 +364,7 @@ export default function TerritoryShow({
                                         </td>
                                     </tr>
                                 )}
-                                {filteredAddresses.map((address) => (
+                                {paginatedAddresses.map((address) => (
                                     <tr
                                         key={address.id}
                                         className="border-t border-sidebar-border/70"
@@ -388,10 +403,11 @@ export default function TerritoryShow({
                                                 <DropdownMenuTrigger asChild>
                                                     <Button
                                                         variant="ghost"
-                                                        size="sm"
-                                                        className="h-8 px-2"
+                                                        size="icon"
+                                                        className="h-8 w-8"
+                                                        aria-label="Actions"
                                                     >
-                                                        Actions
+                                                        <MoreVertical className="h-4 w-4" />
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
@@ -445,8 +461,16 @@ export default function TerritoryShow({
                                 </tr>
                             ))}
                             </tbody>
-                        </table>
+                        </DataTable>
                     </div>
+                    <DataTablePagination
+                        page={pagination.page}
+                        pageCount={pagination.pageCount}
+                        pageSize={pagination.pageSize}
+                        totalItems={pagination.totalItems}
+                        onPageChange={pagination.setPage}
+                        onPageSizeChange={pagination.setPageSize}
+                    />
                 </div>
             </div>
 

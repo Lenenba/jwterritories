@@ -65,6 +65,11 @@ class Territory extends Model
         return $this->hasMany(Address::class);
     }
 
+    public function streets(): HasMany
+    {
+        return $this->hasMany(TerritoryStreet::class);
+    }
+
     public function assignments(): HasMany
     {
         return $this->hasMany(Assignment::class);

@@ -17,6 +17,12 @@ type MapAddress = {
     do_not_call: boolean;
 };
 
+type MapStreet = {
+    id: number;
+    name: string;
+    geojson: unknown;
+};
+
 const buildAddressLabel = (address: MapAddress) => {
     const streetLine = [address.civic_number, address.street]
         .filter(Boolean)
@@ -39,10 +45,17 @@ const defaultMarkerIcon = L.icon({
     shadowSize: [41, 41],
 });
 
-export default function TerritoryMap({ addresses }: { addresses: MapAddress[] }) {
+export default function TerritoryMap({
+    addresses,
+    streets = [],
+}: {
+    addresses: MapAddress[];
+    streets?: MapStreet[];
+}) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<L.Map | null>(null);
     const markersRef = useRef<L.LayerGroup | null>(null);
+    const streetsRef = useRef<L.LayerGroup | null>(null);
 
     const points = useMemo(
         () =>
@@ -61,8 +74,15 @@ export default function TerritoryMap({ addresses }: { addresses: MapAddress[] })
         [addresses],
     );
 
+    const streetGeojson = useMemo(
+        () => streets.map((street) => street.geojson).filter(Boolean),
+        [streets],
+    );
+
+    const hasMapData = points.length > 0 || streetGeojson.length > 0;
+
     useEffect(() => {
-        if (!containerRef.current || mapRef.current || points.length === 0) {
+        if (!containerRef.current || mapRef.current || !hasMapData) {
             return;
         }
 
@@ -78,14 +98,26 @@ export default function TerritoryMap({ addresses }: { addresses: MapAddress[] })
 
         mapRef.current = map;
         markersRef.current = L.layerGroup().addTo(map);
-    }, [points.length]);
+        streetsRef.current = L.layerGroup().addTo(map);
+    }, [hasMapData]);
 
     useEffect(() => {
-        if (!mapRef.current || !markersRef.current) {
+        if (!mapRef.current || !markersRef.current || !streetsRef.current) {
             return;
         }
 
         markersRef.current.clearLayers();
+        streetsRef.current.clearLayers();
+
+        streetGeojson.forEach((geojson) => {
+            L.geoJSON(geojson as any, {
+                style: {
+                    color: '#facc15',
+                    weight: 4,
+                    opacity: 0.9,
+                },
+            }).addTo(streetsRef.current as L.LayerGroup);
+        });
 
         points.forEach((point) => {
             const marker = L.marker([point.lat, point.lng], {
@@ -94,37 +126,51 @@ export default function TerritoryMap({ addresses }: { addresses: MapAddress[] })
             marker.bindTooltip(point.label, { direction: 'top', offset: [0, -8] });
         });
 
-        if (points.length > 0) {
-            const bounds = L.latLngBounds(
-                points.map((point) => [point.lat, point.lng]),
-            );
+        const bounds = L.latLngBounds([]);
+
+        points.forEach((point) => {
+            bounds.extend([point.lat, point.lng]);
+        });
+
+        streetsRef.current.eachLayer((layer) => {
+            if (typeof (layer as L.GeoJSON).getBounds === 'function') {
+                const layerBounds = (layer as L.GeoJSON).getBounds();
+                if (layerBounds.isValid()) {
+                    bounds.extend(layerBounds);
+                }
+            }
+        });
+
+        if (bounds.isValid()) {
             mapRef.current.fitBounds(bounds, { padding: [24, 24], maxZoom: 17 });
         }
-    }, [points]);
+    }, [points, streetGeojson]);
 
     useEffect(() => {
-        if (points.length > 0) {
+        if (hasMapData) {
             return;
         }
         if (mapRef.current) {
             mapRef.current.remove();
             mapRef.current = null;
             markersRef.current = null;
+            streetsRef.current = null;
         }
-    }, [points.length]);
+    }, [hasMapData]);
 
     useEffect(() => {
         return () => {
             mapRef.current?.remove();
             mapRef.current = null;
             markersRef.current = null;
+            streetsRef.current = null;
         };
     }, []);
 
-    if (points.length === 0) {
+    if (!hasMapData) {
         return (
             <div className="flex h-[360px] items-center justify-center rounded-sm border border-dashed border-muted-foreground/40 bg-muted/30 p-4 text-sm text-muted-foreground">
-                Add coordinates to see address pins.
+                Add streets or coordinates to see the map.
             </div>
         );
     }

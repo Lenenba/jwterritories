@@ -4,9 +4,20 @@ import { show as showTerritory } from '@/routes/territories';
 import { type BreadcrumbItem } from '@/types';
 import { Form, Head, Link, usePage } from '@inertiajs/react';
 import { type MouseEvent, useMemo, useState } from 'react';
+import { MoreVertical } from 'lucide-react';
 
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
+import { DataTable } from '@/components/ui/data-table';
+import { DataTablePagination } from '@/components/ui/data-table-pagination';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -16,6 +27,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { humanizeDate, parseDate } from '@/lib/date';
+import { useDataTablePagination } from '@/hooks/use-data-table-pagination';
 
 type Assignment = {
     id: number;
@@ -61,6 +73,7 @@ export default function AssignmentsIndex({
     const [statusFilter, setStatusFilter] = useState('all');
     const [assigneeFilter, setAssigneeFilter] = useState('all');
     const [filtersOpen, setFiltersOpen] = useState(false);
+    const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
     const { url } = usePage();
     const selectedTerritoryId = useMemo(() => {
         const queryString = url.split('?')[1] ?? '';
@@ -137,6 +150,9 @@ export default function AssignmentsIndex({
         isOverdue,
     ]);
 
+    const pagination = useDataTablePagination(filteredAssignments);
+    const paginatedAssignments = pagination.paginatedItems;
+
     const totalAssignments = assignments.length;
     const activeCount = assignments.filter(
         (assignment) => assignment.status === 'active',
@@ -195,7 +211,7 @@ export default function AssignmentsIndex({
                     </div>
                 </div>
 
-                <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
+                <div className="grid gap-6">
                     <div className="rounded-sm border border-sidebar-border/70">
                         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-sidebar-border/70 px-4 py-3">
                             <div className="text-sm font-semibold">
@@ -252,10 +268,13 @@ export default function AssignmentsIndex({
                                 >
                                     Clear
                                 </Button>
-                                <Button asChild size="sm">
-                                    <a href="#new-assignment">
-                                        Add assignment
-                                    </a>
+                                <Button
+                                    size="sm"
+                                    onClick={() =>
+                                        setAssignmentDialogOpen(true)
+                                    }
+                                >
+                                    Add assignment
                                 </Button>
                             </div>
                         </div>
@@ -294,33 +313,35 @@ export default function AssignmentsIndex({
                         )}
 
                         <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
+                            <DataTable className="w-full text-sm">
                                 <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
                                     <tr>
                                         <th className="px-4 py-3">
                                             Territory
                                         </th>
-                                        <th className="px-4 py-3">Assignee</th>
-                                    <th className="px-4 py-3">Start</th>
-                                    <th className="px-4 py-3">Due</th>
-                                    <th className="px-4 py-3">Status</th>
-                                    <th className="px-4 py-3 text-right">
-                                        Actions
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {filteredAssignments.length === 0 && (
-                                    <tr>
-                                        <td
-                                            colSpan={6}
-                                            className="px-4 py-6 text-center text-sm text-muted-foreground"
-                                        >
-                                            No assignments found.
-                                        </td>
+                                        <th className="px-4 py-3">
+                                            Assignee
+                                        </th>
+                                        <th className="px-4 py-3">Start</th>
+                                        <th className="px-4 py-3">Due</th>
+                                        <th className="px-4 py-3">Status</th>
+                                        <th className="px-4 py-3 text-right">
+                                            Actions
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredAssignments.length === 0 && (
+                                        <tr>
+                                            <td
+                                                colSpan={6}
+                                                className="px-4 py-6 text-center text-sm text-muted-foreground"
+                                            >
+                                                No assignments found.
+                                            </td>
                                         </tr>
                                     )}
-                                    {filteredAssignments.map((assignment) => (
+                                    {paginatedAssignments.map((assignment) => (
                                         <tr
                                             key={assignment.id}
                                             className="border-t border-sidebar-border/70"
@@ -331,7 +352,7 @@ export default function AssignmentsIndex({
                                             </td>
                                             <td className="px-4 py-3">
                                                 {assignment.assignee?.name ??
-                                                    '—'}
+                                                    '-'}
                                             </td>
                                             <td className="px-4 py-3">
                                                 {humanizeDate(
@@ -339,7 +360,9 @@ export default function AssignmentsIndex({
                                                 )}
                                             </td>
                                             <td className="px-4 py-3">
-                                                {humanizeDate(assignment.due_at)}
+                                                {humanizeDate(
+                                                    assignment.due_at,
+                                                )}
                                             </td>
                                             <td className="px-4 py-3">
                                                 {isOverdue(assignment)
@@ -351,66 +374,81 @@ export default function AssignmentsIndex({
                                                     <DropdownMenuTrigger asChild>
                                                         <Button
                                                             variant="ghost"
-                                                            size="sm"
-                                                            className="h-8 px-2"
+                                                            size="icon"
+                                                            className="h-8 w-8"
+                                                            aria-label="Actions"
                                                         >
-                                                            Actions
+                                                            <MoreVertical className="h-4 w-4" />
                                                         </Button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem asChild>
-                                                        <Link
-                                                            href={showTerritory(
-                                                                assignment
-                                                                    .territory
-                                                                    .id,
-                                                            )}
-                                                        >
-                                                            View territory
-                                                        </Link>
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem asChild>
-                                                        <Link
-                                                            href={edit(
-                                                                assignment.id,
-                                                            )}
-                                                        >
-                                                            Update assignment
-                                                        </Link>
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem asChild>
-                                                        <Link
-                                                            href={destroy(
-                                                                assignment.id,
-                                                            )}
-                                                            method="delete"
-                                                            as="button"
-                                                            onClick={confirmDelete(
-                                                                assignment
-                                                                    .territory
-                                                                    .code,
-                                                            )}
-                                                        >
-                                                            Delete assignment
-                                                        </Link>
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </td>
-                                    </tr>
-                                ))}
+                                                        <DropdownMenuItem asChild>
+                                                            <Link
+                                                                href={showTerritory(
+                                                                    assignment
+                                                                        .territory
+                                                                        .id,
+                                                                )}
+                                                            >
+                                                                View territory
+                                                            </Link>
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem asChild>
+                                                            <Link
+                                                                href={edit(
+                                                                    assignment.id,
+                                                                )}
+                                                            >
+                                                                Update assignment
+                                                            </Link>
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem asChild>
+                                                            <Link
+                                                                href={destroy(
+                                                                    assignment.id,
+                                                                )}
+                                                                method="delete"
+                                                                as="button"
+                                                                onClick={confirmDelete(
+                                                                    assignment
+                                                                        .territory
+                                                                        .code,
+                                                                )}
+                                                            >
+                                                                Delete assignment
+                                                            </Link>
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </td>
+                                        </tr>
+                                    ))}
                                 </tbody>
-                            </table>
+                            </DataTable>
                         </div>
+                        <DataTablePagination
+                            page={pagination.page}
+                            pageCount={pagination.pageCount}
+                            pageSize={pagination.pageSize}
+                            totalItems={pagination.totalItems}
+                            onPageChange={pagination.setPage}
+                            onPageSizeChange={pagination.setPageSize}
+                        />
                     </div>
 
-                    <div
-                        id="new-assignment"
-                        className="rounded-sm border border-sidebar-border/70 p-4"
-                    >
-                        <h2 className="mb-3 text-sm font-semibold">
-                            New assignment
-                        </h2>
+                </div>
+
+                <Dialog
+                    open={assignmentDialogOpen}
+                    onOpenChange={setAssignmentDialogOpen}
+                >
+                    <DialogContent className="sm:max-w-2xl">
+                        <DialogHeader>
+                            <DialogTitle>New assignment</DialogTitle>
+                            <DialogDescription>
+                                Create a new territory assignment.
+                            </DialogDescription>
+                        </DialogHeader>
                         <Form {...store.form()} className="space-y-4">
                             {({ processing, errors }) => (
                                 <>
@@ -481,9 +519,7 @@ export default function AssignmentsIndex({
                                     </div>
 
                                     <div className="grid gap-2">
-                                        <Label htmlFor="due_at">
-                                            Due date
-                                        </Label>
+                                        <Label htmlFor="due_at">Due date</Label>
                                         <Input
                                             id="due_at"
                                             name="due_at"
@@ -505,14 +541,28 @@ export default function AssignmentsIndex({
                                         <InputError message={errors.notes} />
                                     </div>
 
-                                    <Button disabled={processing} type="submit">
-                                        Create assignment
-                                    </Button>
+                                    <DialogFooter>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={() =>
+                                                setAssignmentDialogOpen(false)
+                                            }
+                                        >
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            disabled={processing}
+                                            type="submit"
+                                        >
+                                            Create assignment
+                                        </Button>
+                                    </DialogFooter>
                                 </>
                             )}
                         </Form>
-                    </div>
-                </div>
+                    </DialogContent>
+                </Dialog>
             </div>
         </AppLayout>
     );

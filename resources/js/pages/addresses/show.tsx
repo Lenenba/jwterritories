@@ -8,9 +8,12 @@ import { index as territoriesIndex, show as showTerritory } from '@/routes/terri
 import { type BreadcrumbItem } from '@/types';
 import { Form, Head, Link } from '@inertiajs/react';
 import { type MouseEvent, useMemo, useState } from 'react';
+import { MoreVertical } from 'lucide-react';
 
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
+import { DataTable } from '@/components/ui/data-table';
+import { DataTablePagination } from '@/components/ui/data-table-pagination';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -20,6 +23,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { humanizeDate, isWithinDays } from '@/lib/date';
+import { useDataTablePagination } from '@/hooks/use-data-table-pagination';
 
 type Address = {
     id: number;
@@ -127,6 +131,9 @@ export default function AddressShow({
             return haystack.includes(normalizedQuery);
         });
     }, [visits, tab, resultFilter, actionFilter, query]);
+
+    const pagination = useDataTablePagination(filteredVisits);
+    const paginatedVisits = pagination.paginatedItems;
 
     const lastVisit = visits[0];
 
@@ -328,7 +335,7 @@ export default function AddressShow({
                         )}
 
                         <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
+                            <DataTable className="w-full text-sm">
                                 <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
                                     <tr>
                                         <th className="px-4 py-3">Visited</th>
@@ -352,7 +359,7 @@ export default function AddressShow({
                                         </td>
                                         </tr>
                                     )}
-                                    {filteredVisits.map((visit) => (
+                                    {paginatedVisits.map((visit) => (
                                         <tr
                                             key={visit.id}
                                             className="border-t border-sidebar-border/70"
@@ -381,10 +388,11 @@ export default function AddressShow({
                                                     <DropdownMenuTrigger asChild>
                                                         <Button
                                                             variant="ghost"
-                                                            size="sm"
-                                                            className="h-8 px-2"
+                                                            size="icon"
+                                                            className="h-8 w-8"
+                                                            aria-label="Actions"
                                                         >
-                                                            Actions
+                                                            <MoreVertical className="h-4 w-4" />
                                                         </Button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end">
@@ -437,8 +445,16 @@ export default function AddressShow({
                                         </tr>
                                     ))}
                                 </tbody>
-                            </table>
+                            </DataTable>
                         </div>
+                        <DataTablePagination
+                            page={pagination.page}
+                            pageCount={pagination.pageCount}
+                            pageSize={pagination.pageSize}
+                            totalItems={pagination.totalItems}
+                            onPageChange={pagination.setPage}
+                            onPageSizeChange={pagination.setPageSize}
+                        />
                     </div>
 
                     <div

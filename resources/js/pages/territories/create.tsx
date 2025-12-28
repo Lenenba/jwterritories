@@ -3,9 +3,12 @@ import { destroy, edit, index, show as showTerritory, store } from '@/routes/ter
 import { type BreadcrumbItem } from '@/types';
 import { Form, Head, Link } from '@inertiajs/react';
 import { type MouseEvent, useMemo, useState } from 'react';
+import { MoreVertical } from 'lucide-react';
 
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
+import { DataTable } from '@/components/ui/data-table';
+import { DataTablePagination } from '@/components/ui/data-table-pagination';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -14,6 +17,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useDataTablePagination } from '@/hooks/use-data-table-pagination';
 
 type ParentTerritory = {
     id: number;
@@ -63,6 +67,9 @@ export default function TerritoryCreate({
                 .includes(normalizedQuery),
         );
     }, [parents, query]);
+
+    const pagination = useDataTablePagination(filteredParents);
+    const paginatedParents = pagination.paginatedItems;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -280,7 +287,7 @@ export default function TerritoryCreate({
                     )}
 
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
+                        <DataTable className="w-full text-sm">
                             <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
                                     <tr>
                                         <th className="px-4 py-3">Code</th>
@@ -291,7 +298,7 @@ export default function TerritoryCreate({
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredParents.length === 0 && (
+                                {filteredParents.length === 0 && (
                                         <tr>
                                             <td
                                                 colSpan={3}
@@ -301,7 +308,7 @@ export default function TerritoryCreate({
                                             </td>
                                     </tr>
                                 )}
-                                {filteredParents.map((parent) => (
+                                {paginatedParents.map((parent) => (
                                     <tr
                                         key={parent.id}
                                         className="border-t border-sidebar-border/70"
@@ -317,10 +324,11 @@ export default function TerritoryCreate({
                                                 <DropdownMenuTrigger asChild>
                                                     <Button
                                                         variant="ghost"
-                                                        size="sm"
-                                                        className="h-8 px-2"
+                                                        size="icon"
+                                                        className="h-8 w-8"
+                                                        aria-label="Actions"
                                                     >
-                                                        Actions
+                                                        <MoreVertical className="h-4 w-4" />
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
@@ -356,14 +364,22 @@ export default function TerritoryCreate({
                                                             Delete territory
                                                         </Link>
                                                     </DropdownMenuItem>
-                                                </DropdownMenuContent>
+                                            </DropdownMenuContent>
                                             </DropdownMenu>
                                         </td>
                                     </tr>
                                 ))}
                             </tbody>
-                        </table>
+                        </DataTable>
                     </div>
+                    <DataTablePagination
+                        page={pagination.page}
+                        pageCount={pagination.pageCount}
+                        pageSize={pagination.pageSize}
+                        totalItems={pagination.totalItems}
+                        onPageChange={pagination.setPage}
+                        onPageSizeChange={pagination.setPageSize}
+                    />
                 </div>
             </div>
         </AppLayout>

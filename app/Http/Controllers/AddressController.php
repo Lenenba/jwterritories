@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Address;
 use App\Models\OrganizationOption;
 use App\Models\Territory;
+use App\Models\TerritoryStreet;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -210,6 +212,159 @@ class AddressController extends Controller
         }
 
         return to_route('territories.show', $territory);
+    }
+
+    /**
+     * Lookup addresses for a street using OpenStreetMap data.
+     */
+    public function streetLookup(Request $request, Territory $territory): JsonResponse
+    {
+        $this->ensureOrganization($request, $territory->organization_id);
+
+        $validated = $request->validate([
+            'street' => ['required', 'string', 'max:255'],
+            'min_lat' => ['required', 'numeric', 'between:-90,90'],
+            'min_lng' => ['required', 'numeric', 'between:-180,180'],
+            'max_lat' => ['required', 'numeric', 'between:-90,90'],
+            'max_lng' => ['required', 'numeric', 'between:-180,180'],
+            'city' => ['nullable', 'string', 'max:255'],
+            'region' => ['nullable', 'string', 'max:255'],
+            'country' => ['nullable', 'string', 'max:255'],
+            'store_street' => ['nullable', 'boolean'],
+        ]);
+
+        $street = trim($validated['street']);
+        if ($street === '') {
+            return response()->json(['addresses' => []]);
+        }
+
+        $minLat = (float) $validated['min_lat'];
+        $minLng = (float) $validated['min_lng'];
+        $maxLat = (float) $validated['max_lat'];
+        $maxLng = (float) $validated['max_lng'];
+
+        if ($minLat > $maxLat) {
+            [$minLat, $maxLat] = [$maxLat, $minLat];
+        }
+        if ($minLng > $maxLng) {
+            [$minLng, $maxLng] = [$maxLng, $minLng];
+        }
+
+        if ($request->boolean('store_street')) {
+            $this->storeStreetGeometry(
+                $territory,
+                $street,
+                $minLat,
+                $minLng,
+                $maxLat,
+                $maxLng,
+            );
+        }
+
+        $streetRegex = $this->escapeOverpassRegex($street);
+        $bbox = implode(',', [$minLat, $minLng, $maxLat, $maxLng]);
+
+        $query = <<<QUERY
+[out:json][timeout:25];
+(
+  node["addr:street"~"^{$streetRegex}",i]["addr:housenumber"]({$bbox});
+  way["addr:street"~"^{$streetRegex}",i]["addr:housenumber"]({$bbox});
+  relation["addr:street"~"^{$streetRegex}",i]["addr:housenumber"]({$bbox});
+);
+out center;
+QUERY;
+
+        $payload = null;
+        $lastResponse = null;
+
+        foreach ($this->overpassEndpoints() as $endpoint) {
+            $response = Http::timeout(20)
+                ->retry(1, 200)
+                ->withHeaders([
+                    'User-Agent' => $this->geocodingUserAgent(),
+                ])
+                ->withBody($query, 'text/plain')
+                ->post($endpoint);
+
+            if ($response->ok()) {
+                $payload = $response->json();
+                break;
+            }
+
+            $lastResponse = $response;
+        }
+
+        if ($payload === null) {
+            $detail = [];
+            if (app()->environment('local') && $lastResponse) {
+                $detail = [
+                    'status' => $lastResponse->status(),
+                    'body' => substr($lastResponse->body(), 0, 500),
+                ];
+            }
+            return response()->json(
+                array_merge(['error' => 'Street lookup failed.'], $detail),
+                502,
+            );
+        }
+        $elements = is_array($payload) ? ($payload['elements'] ?? []) : [];
+        $expectedCity = $this->normalizePlaceName($validated['city'] ?? null);
+
+        $addresses = collect($elements)
+            ->map(function ($element) use ($street, $validated) {
+                $tags = $element['tags'] ?? [];
+                $houseNumber = $tags['addr:housenumber'] ?? null;
+                if (!$houseNumber) {
+                    return null;
+                }
+
+                $streetName = $tags['addr:street'] ?? $street;
+                $lat = $element['lat'] ?? ($element['center']['lat'] ?? null);
+                $lng = $element['lon'] ?? ($element['center']['lon'] ?? null);
+                if ($lat === null || $lng === null) {
+                    return null;
+                }
+
+                $city = $tags['addr:city'] ?? ($validated['city'] ?? null);
+                $region = $tags['addr:state']
+                    ?? $tags['addr:province']
+                    ?? $tags['addr:region']
+                    ?? ($validated['region'] ?? null);
+                $country = $tags['addr:country']
+                    ?? $tags['addr:country_code']
+                    ?? ($validated['country'] ?? null);
+
+                return [
+                    'civic_number' => (string) $houseNumber,
+                    'street' => (string) $streetName,
+                    'label' => trim($houseNumber . ' ' . $streetName),
+                    'city' => $city,
+                    'region' => $region,
+                    'postal_code' => $tags['addr:postcode'] ?? null,
+                    'country' => $country,
+                    'lat' => (float) $lat,
+                    'lng' => (float) $lng,
+                ];
+            })
+            ->filter()
+            ->filter(function ($row) use ($expectedCity) {
+                if ($expectedCity === '' || empty($row['city'])) {
+                    return true;
+                }
+                return $this->normalizePlaceName($row['city']) === $expectedCity;
+            })
+            ->unique(function ($row) {
+                return strtolower(trim(implode('|', [
+                    $row['civic_number'] ?? '',
+                    $row['street'] ?? '',
+                    $row['postal_code'] ?? '',
+                ])));
+            })
+            ->take(500)
+            ->values()
+            ->all();
+
+        return response()->json(['addresses' => $addresses]);
     }
 
     /**
@@ -437,6 +592,41 @@ class AddressController extends Controller
         ];
     }
 
+    private function normalizePlaceName(?string $value): string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '';
+        }
+
+        $lowered = function_exists('mb_strtolower')
+            ? mb_strtolower($value, 'UTF-8')
+            : strtolower($value);
+        $transliterated = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $lowered);
+        $normalized = $transliterated !== false ? $transliterated : $lowered;
+        $normalized = preg_replace('/[^a-z0-9]+/', ' ', $normalized);
+
+        return trim((string) $normalized);
+    }
+
+    private function escapeOverpassRegex(string $value): string
+    {
+        $escaped = preg_quote($value, '/');
+        return str_replace('"', '\\"', $escaped);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function overpassEndpoints(): array
+    {
+        return [
+            'https://overpass-api.de/api/interpreter',
+            'https://overpass.kumi.systems/api/interpreter',
+            'https://overpass.nchc.org.tw/api/interpreter',
+        ];
+    }
+
     /**
      * @param array<string, mixed> $data
      */
@@ -490,6 +680,154 @@ class AddressController extends Controller
             'lat' => (float) $first['lat'],
             'lng' => (float) $first['lon'],
         ];
+    }
+
+    private function storeStreetGeometry(
+        Territory $territory,
+        string $street,
+        float $minLat,
+        float $minLng,
+        float $maxLat,
+        float $maxLng,
+    ): void {
+        $street = trim($street);
+        if ($street === '') {
+            return;
+        }
+
+        $normalized = $this->normalizeStreetName($street);
+        if ($normalized === '') {
+            return;
+        }
+
+        $existing = TerritoryStreet::query()
+            ->where('territory_id', $territory->id)
+            ->where('name_normalized', $normalized)
+            ->first();
+
+        if ($existing && $existing->geojson) {
+            return;
+        }
+
+        $geojson = $this->fetchStreetGeojson(
+            $street,
+            $minLat,
+            $minLng,
+            $maxLat,
+            $maxLng,
+        );
+
+        if ($geojson === null) {
+            return;
+        }
+
+        TerritoryStreet::updateOrCreate(
+            [
+                'territory_id' => $territory->id,
+                'name_normalized' => $normalized,
+            ],
+            [
+                'name' => $street,
+                'geojson' => $geojson,
+                'source' => 'overpass',
+            ],
+        );
+    }
+
+    private function fetchStreetGeojson(
+        string $street,
+        float $minLat,
+        float $minLng,
+        float $maxLat,
+        float $maxLng,
+    ): ?array {
+        $streetRegex = $this->escapeOverpassRegex($street);
+        $bbox = implode(',', [$minLat, $minLng, $maxLat, $maxLng]);
+
+        $query = <<<QUERY
+[out:json][timeout:25];
+(
+  way["highway"]["name"~"^{$streetRegex}$",i]({$bbox});
+);
+out geom;
+QUERY;
+
+        $payload = null;
+
+        foreach ($this->overpassEndpoints() as $endpoint) {
+            $response = Http::timeout(20)
+                ->retry(1, 200)
+                ->withHeaders([
+                    'User-Agent' => $this->geocodingUserAgent(),
+                ])
+                ->withBody($query, 'text/plain')
+                ->post($endpoint);
+
+            if ($response->ok()) {
+                $payload = $response->json();
+                break;
+            }
+
+        }
+
+        if ($payload === null) {
+            return null;
+        }
+
+        $elements = is_array($payload) ? ($payload['elements'] ?? []) : [];
+        $features = [];
+
+        foreach ($elements as $element) {
+            if (($element['type'] ?? '') !== 'way') {
+                continue;
+            }
+
+            $geometry = $element['geometry'] ?? null;
+            if (!is_array($geometry) || count($geometry) < 2) {
+                continue;
+            }
+
+            $coordinates = [];
+            foreach ($geometry as $point) {
+                if (!isset($point['lon'], $point['lat'])) {
+                    continue;
+                }
+                $coordinates[] = [
+                    (float) $point['lon'],
+                    (float) $point['lat'],
+                ];
+            }
+
+            if (count($coordinates) < 2) {
+                continue;
+            }
+
+            $features[] = [
+                'type' => 'Feature',
+                'properties' => [
+                    'name' => $element['tags']['name'] ?? $street,
+                    'osm_id' => $element['id'] ?? null,
+                ],
+                'geometry' => [
+                    'type' => 'LineString',
+                    'coordinates' => $coordinates,
+                ],
+            ];
+        }
+
+        if (!$features) {
+            return null;
+        }
+
+        return [
+            'type' => 'FeatureCollection',
+            'features' => $features,
+        ];
+    }
+
+    private function normalizeStreetName(string $value): string
+    {
+        return $this->normalizePlaceName($value);
     }
 
     private function geocodingUserAgent(): string

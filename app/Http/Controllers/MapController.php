@@ -17,6 +17,7 @@ class MapController extends Controller
     {
         $territories = Territory::query()
             ->where('organization_id', $request->user()->organization_id)
+            ->with(['streets:id,territory_id,name,geojson'])
             ->orderBy('code')
             ->get([
                 'id',
@@ -36,6 +37,13 @@ class MapController extends Controller
                         : null,
                     'overlay_corners' => $territory->overlay_corners,
                     'boundary_geojson' => $territory->boundary_geojson,
+                    'streets' => $territory->streets->map(function ($street) {
+                        return [
+                            'id' => $street->id,
+                            'name' => $street->name,
+                            'geojson' => $street->geojson,
+                        ];
+                    }),
                 ];
             });
 

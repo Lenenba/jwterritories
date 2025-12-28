@@ -5,8 +5,12 @@ import { create, destroy, edit, show as showTerritory } from '@/routes/territori
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import { type MouseEvent, useMemo, useState } from 'react';
+import { MoreVertical } from 'lucide-react';
 
+import OrganizationMap from '@/components/organization-map';
 import { Button } from '@/components/ui/button';
+import { DataTable } from '@/components/ui/data-table';
+import { DataTablePagination } from '@/components/ui/data-table-pagination';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -14,6 +18,13 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import { useDataTablePagination } from '@/hooks/use-data-table-pagination';
+
+type TerritoryStreet = {
+    id: number;
+    name: string;
+    geojson: unknown;
+};
 
 type TerritoryOverlay = {
     id: number;
@@ -22,6 +33,7 @@ type TerritoryOverlay = {
     map_image_url?: string | null;
     overlay_corners?: unknown;
     boundary_geojson?: unknown;
+    streets?: TerritoryStreet[];
 };
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -71,6 +83,9 @@ export default function MapIndex({
         });
     }, [territories, tab, query]);
 
+    const pagination = useDataTablePagination(filteredTerritories);
+    const paginatedTerritories = pagination.paginatedItems;
+
     const totalCount = territories.length;
     const withImages = territories.filter(
         (territory) => territory.map_image_url,
@@ -88,8 +103,7 @@ export default function MapIndex({
                 <div>
                     <h1 className="text-2xl font-semibold">Organization map</h1>
                     <p className="text-sm text-muted-foreground">
-                        Overlay scans and visualize territory coverage as data
-                        grows.
+                        Overlay scans and visualize territory street coverage.
                     </p>
                 </div>
 
@@ -130,11 +144,12 @@ export default function MapIndex({
 
                 <div className="rounded-sm border border-sidebar-border/70 p-4">
                     <div className="mb-3 text-sm font-semibold">
-                        Map workspace
+                        Street coverage
                     </div>
-                    <div className="h-[320px] rounded-sm border border-dashed border-muted-foreground/40 bg-muted/30" />
+                    <OrganizationMap territories={territories} />
                     <p className="mt-3 text-xs text-muted-foreground">
-                        Leaflet + overlay calibration will live here.
+                        Streets are colored by territory. Add streets from a
+                        territory to populate this map.
                     </p>
                 </div>
 
@@ -206,7 +221,7 @@ export default function MapIndex({
                     )}
 
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
+                        <DataTable className="w-full text-sm">
                             <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
                                 <tr>
                                     <th className="px-4 py-3">Code</th>
@@ -229,7 +244,7 @@ export default function MapIndex({
                                         </td>
                                     </tr>
                                 )}
-                                {filteredTerritories.map((territory) => (
+                                {paginatedTerritories.map((territory) => (
                                     <tr
                                         key={territory.id}
                                         className="border-t border-sidebar-border/70"
@@ -255,10 +270,11 @@ export default function MapIndex({
                                                 <DropdownMenuTrigger asChild>
                                                     <Button
                                                         variant="ghost"
-                                                        size="sm"
-                                                        className="h-8 px-2"
+                                                        size="icon"
+                                                        className="h-8 w-8"
+                                                        aria-label="Actions"
                                                     >
-                                                        Actions
+                                                        <MoreVertical className="h-4 w-4" />
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
@@ -333,8 +349,16 @@ export default function MapIndex({
                                 </tr>
                                 ))}
                             </tbody>
-                        </table>
+                        </DataTable>
                     </div>
+                    <DataTablePagination
+                        page={pagination.page}
+                        pageCount={pagination.pageCount}
+                        pageSize={pagination.pageSize}
+                        totalItems={pagination.totalItems}
+                        onPageChange={pagination.setPage}
+                        onPageSizeChange={pagination.setPageSize}
+                    />
                 </div>
             </div>
         </AppLayout>

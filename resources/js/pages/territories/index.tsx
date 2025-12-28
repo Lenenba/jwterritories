@@ -4,8 +4,11 @@ import { create, destroy, edit, index, show } from '@/routes/territories';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import { type MouseEvent, useMemo, useState } from 'react';
+import { MoreVertical } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { DataTable } from '@/components/ui/data-table';
+import { DataTablePagination } from '@/components/ui/data-table-pagination';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -14,6 +17,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { humanizeDate } from '@/lib/date';
+import { useDataTablePagination } from '@/hooks/use-data-table-pagination';
 
 type Territory = {
     id: number;
@@ -109,6 +113,9 @@ export default function TerritoriesIndex({
             return haystack.includes(normalizedQuery);
         });
     }, [territories, tab, typeFilter, languageFilter, query]);
+
+    const pagination = useDataTablePagination(filteredTerritories);
+    const paginatedTerritories = pagination.paginatedItems;
 
     const totalCount = territories.length;
     const withAddresses = territories.filter(
@@ -259,7 +266,7 @@ export default function TerritoriesIndex({
                         </div>
                     )}
 
-                    <table className="w-full text-sm">
+                    <DataTable className="w-full text-sm">
                         <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
                             <tr>
                                 <th className="px-4 py-3">Code</th>
@@ -286,7 +293,7 @@ export default function TerritoriesIndex({
                                     </td>
                                 </tr>
                             )}
-                            {filteredTerritories.map((territory) => (
+                            {paginatedTerritories.map((territory) => (
                                 <tr
                                     key={territory.id}
                                     className="border-t border-sidebar-border/70"
@@ -319,10 +326,11 @@ export default function TerritoriesIndex({
                                             <DropdownMenuTrigger asChild>
                                                 <Button
                                                     variant="ghost"
-                                                    size="sm"
-                                                    className="h-8 px-2"
+                                                    size="icon"
+                                                    className="h-8 w-8"
+                                                    aria-label="Actions"
                                                 >
-                                                    Actions
+                                                    <MoreVertical className="h-4 w-4" />
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
@@ -378,7 +386,15 @@ export default function TerritoriesIndex({
                                 </tr>
                             ))}
                         </tbody>
-                    </table>
+                    </DataTable>
+                    <DataTablePagination
+                        page={pagination.page}
+                        pageCount={pagination.pageCount}
+                        pageSize={pagination.pageSize}
+                        totalItems={pagination.totalItems}
+                        onPageChange={pagination.setPage}
+                        onPageSizeChange={pagination.setPageSize}
+                    />
                 </div>
             </div>
         </AppLayout>
